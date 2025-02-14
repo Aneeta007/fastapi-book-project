@@ -1,4 +1,4 @@
-name: Deploy FastAPI to EC2
+name: Deploy to EC2
 
 on:
   push:
@@ -13,15 +13,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Decode private SSH key
+      - name: Decode and Save SSH Key
         run: |
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" | base64 --decode > private_key.pem
-          chmod 600 private_key.pem
+          chmod 400 private_key.pem  # FIX: Use chmod 400
 
-      - name: Deploy to EC2
+      - name: SSH into EC2 and Deploy
         run: |
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ubuntu@44.204.80.85 << 'EOF'
-            cd ~/fastapi-book-project
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@54.172.128.146 << 'EOF'
+            cd /home/ubuntu/fastapi-book-project
             git pull origin main
             docker-compose down
             docker-compose up -d --build
