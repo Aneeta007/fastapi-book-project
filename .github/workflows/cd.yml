@@ -3,55 +3,36 @@ name: CD Pipeline
 on:
   push:
     branches:
-      - main  # Triggers deployment when pushing to main
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Deploy to EC2 via SSH
+      - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ secrets.SERVER_IP }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -e  # Exit immediately if a command fails
-            echo "✅ SSH Connection Successful"
+            # Navigate to the app directory
+            cd /home/ubuntu/fastapi-app || git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME.git fastapi-app
+            cd /home/ubuntu/fastapi-app
 
-            # Change to home directory
-            cd ~
+            # Pull latest changes
+            git checkout main
+            git pull origin main
 
-            # Remove existing repo if it exists
-            if [ -d "fastapi-book-project" ]; then
-              echo "📂 Project directory exists. Pulling latest changes..."
-              cd fastapi-book-project
-              git reset --hard
-              git pull origin main
-            else
-              echo "🆕 Cloning repository..."
-              git clone https://github.com/Aneeta007/fastapi-book-project.git
-              cd fastapi-book-project
-            fi
-
-            # Ensure Docker is running
-            sudo systemctl start docker
-
-            # Stop old containers
-            echo "🛑 Stopping old containers..."
-            docker compose down
-
-            # Rebuild and start containers
-            echo "🚀 Starting Docker containers..."
-            docker compose up -d --build
+            # Build and run the Docker container
+            docker stop fastapi-app || true
+            docker rm fastapi-app || true
+            docker build -t fastapi-app .
+            docker run -d --name fastapi-app -p 8000:8000 fastapi-app
 
             # Restart Nginx
-            echo "🔄 Restarting Nginx..."
             sudo systemctl restart nginx
-
-            echo "🎉 Deployment successful!"
