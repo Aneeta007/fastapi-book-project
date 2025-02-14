@@ -14,12 +14,13 @@ jobs:
       - name: Decode and Save SSH Key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > private_key.pem
-          chmod 600 private_key.pem  # Ensure correct permissions
-          ls -lah private_key.pem  # Debug step to verify key
+          chmod 600 private_key.pem  # Secure key file
 
       - name: Add EC2 Instance to Known Hosts
         run: |
+          mkdir -p ~/.ssh  # Ensure the .ssh directory exists
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          cat ~/.ssh/known_hosts  # Debug: Check the file
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
