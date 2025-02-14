@@ -1,4 +1,4 @@
-name: Deploy FastAPI App
+name: CD Pipeline
 
 on:
   push:
@@ -10,26 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Decode and Set Up SSH Key
-        run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY_B64 }}" | base64 --decode > fastapi.pem
-          chmod 400 fastapi.pem
-          cat fastapi.pem # Debugging step to confirm key exists
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.EC2_PRIVATE_KEY }}
 
-      - name: SSH into EC2 and Deploy
-        env:
-          SSH_USER: "ubuntu"
-          SSH_HOST: "54.172.128.146"  # Replace with your EC2 Public IP
-        run: |
-          ssh -o StrictHostKeyChecking=no -i fastapi.pem $SSH_USER@$SSH_HOST << 'EOF'
-            cd /home/ubuntu/app
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          script: |
+            cd /home/ubuntu/fastapi-book-project
             git pull origin main
             docker compose down
             docker compose up -d --build
-          EOF
-
-      - name: Cleanup SSH Key
-        run: rm -f fastapi.pem
