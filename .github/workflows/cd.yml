@@ -11,37 +11,25 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
-          chmod 400 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Test SSH Connection
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} "echo '✅ SSH Connection Successful'"
-
-      - name: Deploy to EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            export PATH=/bin:/usr/bin:$PATH  # Ensure correct paths
-
-            # Ensure repo exists
-            if [ ! -d "fastapi-book-project" ]; then
-              git clone https://github.com/Aneeta007/fastapi-book-project.git
-            fi
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "✅ SSH connection successful!"
             
-            cd fastapi-book-project
+            # Navigate to project folder
+            cd /home/ubuntu/fastapi-book-project
+
+            # Pull latest changes
+            git fetch --all
             git reset --hard origin/main
             git pull origin main
 
-            # Bring down existing containers and rebuild
+            # Restart Docker containers
             docker-compose down
             docker-compose up -d --build
-
-            # Ensure nginx is restarted (if using reverse proxy)
-            sudo systemctl restart nginx || echo "No nginx to restart"
-          EOF
