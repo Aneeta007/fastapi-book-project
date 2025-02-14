@@ -6,10 +6,15 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Decode and Save SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 --decode > private_key.pem
+          chmod 400 private_key.pem  # Secure the key file
+          ls -lah private_key.pem  # Debug to ensure key exists
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
@@ -18,5 +23,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Check if Docker is installed, install only if missing
-            if ! command 
+            cd /home/ubuntu/fastapi-book-project
+            git fetch --all
+            git reset --hard origin/main
+            git pull origin main
+
+            # Restart Docker containers
+            docker-compose down
+            docker-compose up -d --build
