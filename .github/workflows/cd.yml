@@ -1,38 +1,41 @@
 name: CD Pipeline
-
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Deploy to Server via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to the app directory
-            cd /home/ubuntu/fastapi-app || git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME.git fastapi-app
-            cd /home/ubuntu/fastapi-app
+            # Update package index and install dependencies
+            sudo apt-get update -y
+            sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
-            # Pull latest changes
-            git checkout main
+            # Add Docker's official GPG key
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+            # Install Docker
+            sudo apt-get update -y
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+            # Add the SSH user to the Docker group
+            sudo usermod -aG docker ${{ secrets.EC2_USER}}
+
+            cd /home/ubuntu/fastapi-book-project
+            git fetch --all
+            git reset --hard origin/main
             git pull origin main
 
-            # Build and run the Docker container
-            docker stop fastapi-app || true
-            docker rm fastapi-app || true
-            docker build -t fastapi-app .
-            docker run -d --name fastapi-app -p 8000:8000 fastapi-app
-
-            # Restart Nginx
-            sudo systemctl restart nginx
+            # Restart the Docker container
+            docker-compose down
+            docker-compose up -d --build
