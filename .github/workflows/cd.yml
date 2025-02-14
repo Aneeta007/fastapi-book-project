@@ -1,7 +1,9 @@
 name: CD Pipeline
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -9,35 +11,33 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Set up SSH Key
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
-          chmod 400 private_key.pem
-
-      - name: Add EC2 to known hosts
+      - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 400 ~/.ssh/id_rsa  # Set stricter permissions
+          ssh-keyscan -H 54.172.128.146 >> ~/.ssh/known_hosts
 
       - name: Test SSH Connection
         run: |
-          echo "Testing SSH connection..."
-          ssh -vvv -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH Connected Successfully'"
-        continue-on-error: false  # Stop if SSH fails
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@54.172.128.146 "echo 'SSH connection successful'"
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/fastapi-book-project
-            git fetch --all
-            git reset --hard origin/main
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@54.172.128.146 << 'EOF'
+            export PATH=/bin:/usr/bin:$PATH  # Ensure all commands work
+            
+            # Ensure repo exists
+            if [ ! -d "fastapi-book-project" ]; then
+              git clone https://github.com/Aneeta007/fastapi-book-project.git
+            fi
+            
+            cd fastapi-book-project
             git pull origin main
-
+            
+            # Restart services
             docker-compose down
             docker-compose up -d --build
+          EOF
