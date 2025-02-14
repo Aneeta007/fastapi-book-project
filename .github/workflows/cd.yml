@@ -10,26 +10,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "✅ SSH connection successful!"
-            
-            # Navigate to project folder
-            cd /home/ubuntu/fastapi-book-project
+    - name: Set Up Docker
+      run: |
+        echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
-            # Pull latest changes
-            git fetch --all
-            git reset --hard origin/main
-            git pull origin main
+    - name: Build and Push Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest .
+        docker push ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
 
-            # Restart Docker containers
-            docker-compose down
-            docker-compose up -d --build
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
+          docker stop fastapi-container || true
+          docker rm fastapi-container || true
+          docker run -d --name fastapi-container -p 80:8000 ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
