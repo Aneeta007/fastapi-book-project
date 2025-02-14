@@ -3,33 +3,55 @@ name: CD Pipeline
 on:
   push:
     branches:
-      - main
+      - main  # Triggers deployment when pushing to main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set Up Docker
-      run: |
-        echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            set -e  # Exit immediately if a command fails
+            echo "✅ SSH Connection Successful"
 
-    - name: Build and Push Docker Image
-      run: |
-        docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest .
-        docker push ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
+            # Change to home directory
+            cd ~
 
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
-          docker stop fastapi-container || true
-          docker rm fastapi-container || true
-          docker run -d --name fastapi-container -p 80:8000 ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi-app:latest
+            # Remove existing repo if it exists
+            if [ -d "fastapi-book-project" ]; then
+              echo "📂 Project directory exists. Pulling latest changes..."
+              cd fastapi-book-project
+              git reset --hard
+              git pull origin main
+            else
+              echo "🆕 Cloning repository..."
+              git clone https://github.com/Aneeta007/fastapi-book-project.git
+              cd fastapi-book-project
+            fi
+
+            # Ensure Docker is running
+            sudo systemctl start docker
+
+            # Stop old containers
+            echo "🛑 Stopping old containers..."
+            docker compose down
+
+            # Rebuild and start containers
+            echo "🚀 Starting Docker containers..."
+            docker compose up -d --build
+
+            # Restart Nginx
+            echo "🔄 Restarting Nginx..."
+            sudo systemctl restart nginx
+
+            echo "🎉 Deployment successful!"
