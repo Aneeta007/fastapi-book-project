@@ -1,0 +1,28 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Decode and Save SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" | base64 --decode > private_key.pem
+          chmod 400 private_key.pem  # FIX: Use chmod 400
+
+      - name: SSH into EC2 and Deploy
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@54.172.128.146<< 'EOF'
+            cd /home/ubuntu/fastapi-book-project
+            git pull origin main
+            docker-compose down
+            docker-compose up -d --build
+          EOF
