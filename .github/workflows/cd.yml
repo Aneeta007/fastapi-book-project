@@ -16,25 +16,32 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 54.172.128.146 >> ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 400 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Test SSH Connection
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} "echo '✅ SSH Connection Successful'"
 
       - name: Deploy to EC2
         run: |
-          ssh ubuntu@54.172.128.146 << 'EOF'
-            export PATH=/bin:/usr/bin:$PATH  # Ensure all commands work
-            
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            export PATH=/bin:/usr/bin:$PATH  # Ensure correct paths
+
             # Ensure repo exists
             if [ ! -d "fastapi-book-project" ]; then
               git clone https://github.com/Aneeta007/fastapi-book-project.git
             fi
             
             cd fastapi-book-project
+            git reset --hard origin/main
             git pull origin main
-            
-            # Restart services
+
+            # Bring down existing containers and rebuild
             docker-compose down
             docker-compose up -d --build
-            sudo systemctl restart nginx
+
+            # Ensure nginx is restarted (if using reverse proxy)
+            sudo systemctl restart nginx || echo "No nginx to restart"
           EOF
